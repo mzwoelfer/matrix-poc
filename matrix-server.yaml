@@ -30,6 +30,10 @@
       register: uid_result
       changed_when: false
 
+    - name: Set host uid fact for container user mapping
+      ansible.builtin.set_fact:
+        host_uid: "{{ uid_result.stdout }}"
+
     - name: Set rootless env fact
       ansible.builtin.set_fact:
         rootless_env:

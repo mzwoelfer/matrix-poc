@@ -15,6 +15,7 @@ services:
     image: docker.io/matrixdotorg/synapse:latest
     container_name: matrix-synapse
     restart: always
+    user: "{{ host_uid }}:{{ host_uid }}"
     depends_on:
       - postgres
     ports:
