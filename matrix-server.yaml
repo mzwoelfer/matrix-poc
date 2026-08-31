@@ -36,7 +36,12 @@
           XDG_RUNTIME_DIR: "/run/user/{{ uid_result.stdout }}"
           DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ uid_result.stdout }}/bus"
 
-    - name: Create data directories
+    - name: Ensure lingering is enabled (containers survive logout, start on boot)
+      become: true
+      ansible.builtin.command: loginctl enable-linger {{ ansible_user }}
+      changed_when: false
+
+    - name: Create data directories (excluding postgres-data, which containers own after first run)
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
@@ -45,7 +50,18 @@
         - "{{ matrix_data_root }}"
         - "{{ matrix_data_root }}/synapse-data"
         - "{{ matrix_data_root }}/synapse-data/media_store"
-        - "{{ matrix_data_root }}/postgres-data"
+
+    - name: Check if postgres-data already exists
+      ansible.builtin.stat:
+        path: "{{ matrix_data_root }}/postgres-data"
+      register: pg_data_stat
+
+    - name: Create postgres-data directory only if it doesn't exist yet
+      ansible.builtin.file:
+        path: "{{ matrix_data_root }}/postgres-data"
+        state: directory
+        mode: "0755"
+      when: not pg_data_stat.stat.exists
 
     - name: Render homeserver.yaml
       ansible.builtin.template:
@@ -84,6 +100,24 @@
       until: synapse_health.status == 200
       retries: 20
       delay: 5
+      ignore_errors: true
+
+    - name: Show synapse logs if it never came up
+      environment: "{{ rootless_env }}"
+      ansible.builtin.command: nerdctl logs matrix-synapse --tail 80
+      register: synapse_logs
+      when: synapse_health is failed
+      changed_when: false
+
+    - name: Print synapse logs
+      ansible.builtin.debug:
+        msg: "{{ synapse_logs.stdout_lines }}"
+      when: synapse_health is failed
+
+    - name: Fail explicitly with a clear message
+      ansible.builtin.fail:
+        msg: "Synapse did not come up - see logs above."
+      when: synapse_health is failed
 
     - name: Register a demo user (alice) so you can log in via Element
       environment: "{{ rootless_env }}"
