@@ -1,6 +1,6 @@
 services:
 
-  postgres:
+  matrix-postgres:
     image: docker.io/library/postgres:16
     container_name: matrix-postgres
     restart: always
@@ -19,7 +19,7 @@ services:
     container_name: matrix-synapse
     restart: always
     depends_on:
-      - postgres
+      - matrix-postgres
     expose:
       - "8008"
     volumes:
@@ -60,3 +60,4 @@ services:
 networks:
   matrix-net:
     driver: bridge
+

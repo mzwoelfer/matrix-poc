@@ -2,6 +2,7 @@
 ## Single-node Matrix POC. TLS is terminated by Caddy.
 
 server_name: "{{ matrix_domain }}"
+public_baseurl: "https://{{ matrix_domain }}/"
 pid_file: /data/homeserver.pid
 
 listeners:
