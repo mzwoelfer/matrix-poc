@@ -30,10 +30,6 @@
       register: uid_result
       changed_when: false
 
-    - name: Set host uid fact for container user mapping
-      ansible.builtin.set_fact:
-        host_uid: "{{ uid_result.stdout }}"
-
     - name: Set rootless env fact
       ansible.builtin.set_fact:
         rootless_env:
@@ -49,7 +45,11 @@
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        mode: "0755"
+        # 0777: rootless containers run as UIDs mapped via /etc/subuid, which
+        # don't correspond to any host UID we can predict or chown to easily.
+        # World-writable sidesteps the mapping entirely. Fine for this POC,
+        # not for a real deployment.
+        mode: "0777"
       loop:
         - "{{ matrix_data_root }}"
         - "{{ matrix_data_root }}/synapse-data"
@@ -64,7 +64,7 @@
       ansible.builtin.file:
         path: "{{ matrix_data_root }}/postgres-data"
         state: directory
-        mode: "0755"
+        mode: "0777"
       when: not pg_data_stat.stat.exists
 
     - name: Render homeserver.yaml
