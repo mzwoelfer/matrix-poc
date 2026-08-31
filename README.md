@@ -12,7 +12,7 @@
 ```bash
 pip install ansible
 ansible-galaxy install -r requirements.yml -p roles/
-ansible-playbook site.yml
+ansible-playbook matrix-server.yml
 ```
 
 ## What the playbook does
