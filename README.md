@@ -114,15 +114,11 @@ dig +short svatrix.duckdns.org
 ```
 
 ## Rollout with Ansible
-Install required Ansible roles:
-
 ```bash
+# 1. Install ansible roles
 ansible-galaxy install -r requirements.yml -p roles/
-```
 
-Run the deployment:
-
-```bash
+# Run the deployment:
 ansible-playbook -i inventory.yaml matrix-server.yaml
 ```
 
@@ -150,39 +146,20 @@ For each host with a configured `matrix_domain`:
 
 ## Access Element
 
-Open:
+In browser open:
 
 ```text
 https://svatrix.duckdns.org
 ```
-
-Element Web is served from the root URL.
-
-The Matrix homeserver is also available through the same hostname:
-
-```text
-https://svatrix.duckdns.org
-```
-
-Matrix client API example:
-
-```text
-https://svatrix.duckdns.org/_matrix/client/versions
-```
-
-You should receive a JSON response containing the supported Matrix client API versions.
 
 ## Demo account
 
-The deployment creates a demo user:
+Create a demo user:
 
 ```text
 Username: martin
-```
 
-The resulting Matrix ID is:
-
-```text
+# Matrix ID is:
 @martin:svatrix.duckdns.org
 ```
 
@@ -190,37 +167,7 @@ The password is configured in `matrix-server.yaml`.
 
 Move the password and other secrets into Ansible Vault.
 
-Log in to Element using:
-
-```text
-Username: martin
-Homeserver: https://svatrix.duckdns.org
-```
-
-## Matrix discovery
-
-Caddy serves the Matrix discovery endpoints:
-
-```text
-/.well-known/matrix/client
-/.well-known/matrix/server
-```
-
-For example:
-
-```bash
-curl https://svatrix.duckdns.org/.well-known/matrix/client
-```
-
-returns the homeserver discovery information.
-
-The server discovery endpoint allows Matrix clients and other Matrix homeservers to discover the Matrix server endpoint from the server name.
-
 ## TLS / HTTPS
-
-Caddy terminates TLS.
-
-The public flow is:
 
 ```text
 Browser
@@ -234,9 +181,12 @@ Caddy :443
 Synapse :8008
 ```
 
-Synapse itself does not terminate TLS. Its HTTP listener is only reachable from the container network.
+Synapse does not terminate TLS. 
+Its HTTP listener is only reachable from the container network.
 
-This is intentional: Caddy handles the public TLS connection while Synapse receives the forwarded request internally.
+Intentional: 
+- Caddy handles the public TLS connection while 
+- Synapse receives the forwarded request internally.
 
 ## Container ports
 
@@ -250,20 +200,6 @@ The deployment does **not** expose Synapse or Element directly on the host.
 | Synapse    |           8008 | internal only |
 | PostgreSQL |           5432 | internal only |
 
-Therefore these old URLs are no longer used:
-
-```text
-http://<vm-ip>:8080
-http://<vm-ip>:8008
-```
-
-Use:
-
-```text
-https://svatrix.duckdns.org
-```
-
-instead.
 
 ## Matrix user IDs
 
@@ -316,24 +252,7 @@ registration_shared_secret: ...
 matrix_test_password: ...
 ```
 
-These are suitable only for a throwaway demonstration.
-
-For a real deployment:
-
-- Store secrets using Ansible Vault.
-- Do not commit passwords to Git.
-- Use unique PostgreSQL and Synapse secrets.
-- Restrict permissions on generated configuration files.
-- Review firewall rules and container permissions.
-
 ## Useful commands
-
-Check running containers:
-
-```bash
-nerdctl ps
-```
-
 Check the Matrix stack:
 
 ```bash
@@ -376,3 +295,36 @@ Check Matrix server discovery:
 curl https://svatrix.duckdns.org/.well-known/matrix/server
 ```
 
+
+# LEARNING NOTES 
+
+Matrix client API example:
+
+```text
+https://svatrix.duckdns.org/_matrix/client/versions
+```
+
+You should receive a JSON response containing the supported Matrix client API versions.
+
+## Matrix discovery
+
+Caddy serves the Matrix discovery endpoints:
+
+```text
+/.well-known/matrix/client
+/.well-known/matrix/server
+```
+
+For example:
+
+```bash
+curl https://svatrix.duckdns.org/.well-known/matrix/client
+```
+
+returns the homeserver discovery information.
+
+The server discovery endpoint allows Matrix clients and other Matrix homeservers to discover the Matrix server endpoint from the server name.
+
+
+# LICENSE
+EUPL-1.2 
