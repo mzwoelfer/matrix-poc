@@ -1,0 +1,15 @@
+---
+- name: Base setup - update packages and install rootless nerdctl
+  hosts: all
+  become: true
+  tasks:
+    - name: Update apt cache and upgrade all packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+
+- name: Install rootless nerdctl
+  hosts: all
+  become: false
+  roles:
+    - role: ansible-nerdctl

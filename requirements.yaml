@@ -1,0 +1,6 @@
+---
+roles:
+  - name: ansible-nerdctl
+    src: https://github.com/mzwoelfer/ansible-nerdctl
+    scm: git
+    version: main
