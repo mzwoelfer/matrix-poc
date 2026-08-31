@@ -67,13 +67,13 @@
 
     - name: Render docker-compose.yaml
       ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ matrix_data_root }}/docker-compose.yml"
+        src: docker-compose.yaml.j2
+        dest: "{{ matrix_data_root }}/docker-compose.yaml"
         mode: "0640"
 
     - name: Start the stack with nerdctl compose
       environment: "{{ rootless_env }}"
-      ansible.builtin.command: nerdctl compose -f {{ matrix_data_root }}/docker-compose.yml up -d
+      ansible.builtin.command: nerdctl compose -f {{ matrix_data_root }}/docker-compose.yaml up -d
       changed_when: true
 
     - name: Wait for Synapse client API to come up
