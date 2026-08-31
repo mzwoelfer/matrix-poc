@@ -4,12 +4,14 @@
     # Matrix client/server discovery.
     handle /.well-known/matrix/client {
         header Content-Type application/json
+        header Access-Control-Allow-Origin "*"
         respond `{"m.homeserver":{"base_url":"https://{{ matrix_domain }}"}}`
     }
 
     # Matrix server discovery.
     handle /.well-known/matrix/server {
         header Content-Type application/json
+        header Access-Control-Allow-Origin "*"
         respond `{"m.server":"{{ matrix_domain }}:443"}`
     }
 
@@ -28,3 +30,4 @@
         reverse_proxy element:80
     }
 }
+
