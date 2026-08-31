@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:16
+    container_name: matrix-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: "{{ postgres_password }}"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - "{{ matrix_data_root }}/postgres-data:/var/lib/postgresql/data"
+ 
+  synapse:
+    image: docker.io/matrixdotorg/synapse:latest
+    container_name: matrix-synapse
+    restart: always
+    depends_on:
+      - postgres
+    ports:
+      - "8008:8008"
+    volumes:
+      - "{{ matrix_data_root }}/synapse-data:/data"
+ 
+  element:
+    image: docker.io/vectorim/element-web:latest
+    container_name: matrix-element
+    restart: always
+    depends_on:
+      - synapse
+    ports:
+      - "8080:80"
+    volumes:
+      - "{{ matrix_data_root }}/element-config.json:/app/config.json:ro"
+

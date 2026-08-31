@@ -13,3 +13,95 @@
   become: false
   roles:
     - role: ansible-nerdctl
+
+
+- name: Deploy Matrix (Synapse + Postgres + Element) via nerdctl compose
+  hosts: all
+  become: false
+  vars:
+    matrix_data_root: "{{ ansible_env.HOME }}/matrix"
+    matrix_server_name: "{{ ansible_host }}"
+    postgres_password: "poc-postgres-change-me"
+    registration_shared_secret: "poc-registration-secret-change-me"
+    matrix_test_user: alice
+    matrix_test_password: "S0meLongPocPassword!"
+  tasks:
+    - name: Get uid of current user for rootless runtime dir
+      ansible.builtin.command: id -u
+      register: uid_result
+      changed_when: false
+ 
+    - name: Set rootless env fact
+      ansible.builtin.set_fact:
+        rootless_env:
+          XDG_RUNTIME_DIR: "/run/user/{{ uid_result.stdout }}"
+          DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ uid_result.stdout }}/bus"
+ 
+    - name: Ensure lingering is enabled (containers survive logout, start on boot)
+      become: true
+      ansible.builtin.command: loginctl enable-linger {{ ansible_user }}
+      changed_when: false
+ 
+    - name: Create data directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0750"
+      loop:
+        - "{{ matrix_data_root }}"
+        - "{{ matrix_data_root }}/synapse-data"
+        - "{{ matrix_data_root }}/synapse-data/media_store"
+        - "{{ matrix_data_root }}/postgres-data"
+ 
+    - name: Render homeserver.yaml
+      ansible.builtin.template:
+        src: homeserver.yaml.j2
+        dest: "{{ matrix_data_root }}/synapse-data/homeserver.yaml"
+        mode: "0640"
+ 
+    - name: Render log.config
+      ansible.builtin.template:
+        src: log.config.j2
+        dest: "{{ matrix_data_root }}/synapse-data/log.config"
+        mode: "0640"
+ 
+    - name: Render element-config.json
+      ansible.builtin.template:
+        src: element-config.json.j2
+        dest: "{{ matrix_data_root }}/element-config.json"
+        mode: "0640"
+ 
+    - name: Render docker-compose.yml
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ matrix_data_root }}/docker-compose.yml"
+        mode: "0640"
+ 
+    - name: Start the stack with nerdctl compose
+      environment: "{{ rootless_env }}"
+      ansible.builtin.command: nerdctl compose -f {{ matrix_data_root }}/docker-compose.yml up -d
+      changed_when: true
+ 
+    - name: Wait for Synapse client API to come up
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:8008/_matrix/client/versions"
+        status_code: 200
+      register: synapse_health
+      until: synapse_health.status == 200
+      retries: 20
+      delay: 5
+ 
+    - name: Register a demo user (alice) so you can log in via Element
+      environment: "{{ rootless_env }}"
+      ansible.builtin.command: >
+        nerdctl exec matrix-synapse
+        register_new_matrix_user
+        -u {{ matrix_test_user }}
+        -p {{ matrix_test_password }}
+        -a
+        -c /data/homeserver.yaml
+        http://localhost:8008
+      register: reg_result
+      changed_when: "'Success!' in reg_result.stdout"
+      failed_when: reg_result.rc != 0 and 'already taken' not in (reg_result.stderr | default(''))
+

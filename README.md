@@ -43,3 +43,17 @@ ansible-playbook matrix-server.yaml
 ## What the playbook does
 - Updates apt cache and upgrades all packages (both VMs)
 - Installs rootless nerdctl via the `ansible-nerdctl` role (both VMs)
+- Deploys Matrix via `nerdctl compose`: Postgres + Synapse + Element Web (both VMs, independently, not yet connected to each other)
+- Creates a demo user `alice` / `S0meLongPocPassword!` on each server
+
+## Try it 
+- Open `http://<vm-ip>:8080` in a browser (Element Web)
+- Set homeserver URL to `http://<vm-ip>:8008` if not already pre-filled
+- Log in as `alice` / `S0meLongPocPassword!`
+- Start chatting (only works within that single server for now — no federation yet)
+
+## Notes
+- Single-node setup only: `server_name` is set to the VM's IP, no TLS, no federation. This is intentional for now — connecting the two servers is the next step.
+- Change `postgres_password` / `registration_shared_secret` in `site.yml` before using this beyond a throwaway test.
+ 
+
