@@ -6,5 +6,7 @@ all:
   hosts:
     training-12:
       ansible_host: 46.224.69.212
+      matrix_domain: svatrix.duckdns.org
     training-13:
       ansible_host: 167.233.198.193
+      # matrix_domain: another-name.duckdns.org

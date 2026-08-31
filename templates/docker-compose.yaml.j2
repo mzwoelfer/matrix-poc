@@ -1,4 +1,5 @@
 services:
+
   postgres:
     image: docker.io/library/postgres:16
     container_name: matrix-postgres
@@ -10,26 +11,40 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - "{{ matrix_data_root }}/postgres-data:/var/lib/postgresql/data"
- 
+
   synapse:
     image: docker.io/matrixdotorg/synapse:latest
     container_name: matrix-synapse
     restart: always
     depends_on:
       - postgres
-    ports:
-      - "8008:8008"
+    expose:
+      - "8008"
     volumes:
       - "{{ matrix_data_root }}/synapse-data:/data"
- 
+
   element:
     image: docker.io/vectorim/element-web:latest
     container_name: matrix-element
     restart: always
     depends_on:
       - synapse
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     volumes:
       - "{{ matrix_data_root }}/element-config.json:/app/config.json:ro"
 
+  caddy:
+    image: docker.io/library/caddy:2
+    container_name: matrix-caddy
+    restart: always
+    depends_on:
+      - element
+      - synapse
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "{{ matrix_data_root }}/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "{{ matrix_data_root }}/caddy/data:/data"
+      - "{{ matrix_data_root }}/caddy/config:/config"

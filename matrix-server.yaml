@@ -2,65 +2,91 @@
 - name: Base setup - update packages and install rootless nerdctl
   hosts: all
   become: true
+
   tasks:
     - name: Update apt cache and upgrade all packages
       ansible.builtin.apt:
         update_cache: true
         upgrade: dist
 
+
 - name: Install rootless nerdctl
   hosts: all
   become: false
+
   roles:
     - role: ansible-nerdctl
 
-- name: Deploy Matrix (Synapse + Postgres + Element) via nerdctl compose
+
+- name: Deploy Matrix POC via rootless nerdctl compose
   hosts: all
   become: false
+
   vars:
     matrix_data_root: "{{ ansible_env.HOME }}/matrix"
-    matrix_server_name: "{{ ansible_host }}"
+
+    matrix_domain: "{{ hostvars[inventory_hostname].matrix_domain }}"
+
     postgres_password: "poc-postgres-change-me"
     registration_shared_secret: "poc-registration-secret-change-me"
+
     matrix_test_user: alice
     matrix_test_password: "S0meLongPocPassword!"
+
   tasks:
+
+    - name: Verify that a Matrix hostname is configured
+      ansible.builtin.assert:
+        that:
+          - matrix_domain is defined
+          - matrix_domain | length > 0
+        fail_msg: >
+          No matrix_domain configured for {{ inventory_hostname }}.
+          Add matrix_domain to the inventory.
+
     - name: Get uid of current user for rootless runtime dir
       ansible.builtin.command: id -u
       register: uid_result
       changed_when: false
 
-    - name: Set rootless env fact
+    - name: Set rootless environment
       ansible.builtin.set_fact:
         rootless_env:
           XDG_RUNTIME_DIR: "/run/user/{{ uid_result.stdout }}"
           DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ uid_result.stdout }}/bus"
 
-    - name: Ensure lingering is enabled (containers survive logout, start on boot)
+    # Rootless containers normally cannot bind privileged ports such as
+    # 80/443 unless the kernel allows unprivileged users to bind them.
+    # This is acceptable for this POC. A production deployment would
+    # normally put Caddy outside the rootless container runtime or use
+    # another controlled port-forwarding mechanism.
+    - name: Allow unprivileged users to bind ports 80 and 443
       become: true
-      ansible.builtin.command: loginctl enable-linger {{ ansible_user }}
-      changed_when: false
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_unprivileged_port_start
+        value: "0"
+        state: present
+        reload: true
 
-    - name: Create data directories (excluding postgres-data, which containers own after first run)
+    - name: Create Matrix data directories
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
-        # 0777: rootless containers run as UIDs mapped via /etc/subuid, which
-        # don't correspond to any host UID we can predict or chown to easily.
-        # World-writable sidesteps the mapping entirely. Fine for this POC,
-        # not for a real deployment.
         mode: "0777"
       loop:
         - "{{ matrix_data_root }}"
         - "{{ matrix_data_root }}/synapse-data"
         - "{{ matrix_data_root }}/synapse-data/media_store"
+        - "{{ matrix_data_root }}/caddy"
+        - "{{ matrix_data_root }}/caddy/data"
+        - "{{ matrix_data_root }}/caddy/config"
 
     - name: Check if postgres-data already exists
       ansible.builtin.stat:
         path: "{{ matrix_data_root }}/postgres-data"
       register: pg_data_stat
 
-    - name: Create postgres-data directory only if it doesn't exist yet
+    - name: Create postgres-data directory only if it does not exist
       ansible.builtin.file:
         path: "{{ matrix_data_root }}/postgres-data"
         state: directory
@@ -79,10 +105,16 @@
         dest: "{{ matrix_data_root }}/synapse-data/log.config"
         mode: "0644"
 
-    - name: Render element-config.json
+    - name: Render Element config
       ansible.builtin.template:
         src: element-config.json.j2
         dest: "{{ matrix_data_root }}/element-config.json"
+        mode: "0644"
+
+    - name: Render Caddyfile
+      ansible.builtin.template:
+        src: Caddyfile.j2
+        dest: "{{ matrix_data_root }}/caddy/Caddyfile"
         mode: "0644"
 
     - name: Render docker-compose.yaml
@@ -91,39 +123,58 @@
         dest: "{{ matrix_data_root }}/docker-compose.yaml"
         mode: "0640"
 
-    - name: Start the stack with nerdctl compose
+    - name: Start the Matrix stack
       environment: "{{ rootless_env }}"
-      ansible.builtin.command: nerdctl compose -f {{ matrix_data_root }}/docker-compose.yaml up -d
+      ansible.builtin.command:
+        cmd: nerdctl compose -f {{ matrix_data_root }}/docker-compose.yaml up -d
       changed_when: true
 
-    - name: Wait for Synapse client API to come up
+    - name: Wait for Caddy HTTPS endpoint
       ansible.builtin.uri:
-        url: "http://127.0.0.1:8008/_matrix/client/versions"
+        url: "https://{{ matrix_domain }}/_matrix/client/versions"
         status_code: 200
-      register: synapse_health
-      until: synapse_health.status == 200
-      retries: 20
+        validate_certs: false
+      register: matrix_health
+      until: matrix_health.status == 200
+      retries: 30
       delay: 5
       ignore_errors: true
 
-    - name: Show synapse logs if it never came up
+    - name: Show Caddy logs if Matrix endpoint never came up
       environment: "{{ rootless_env }}"
-      ansible.builtin.command: nerdctl logs matrix-synapse --tail 80
-      register: synapse_logs
-      when: synapse_health is failed
+      ansible.builtin.command:
+        cmd: nerdctl logs matrix-caddy --tail 80
+      register: caddy_logs
+      when: matrix_health is failed
       changed_when: false
 
-    - name: Print synapse logs
+    - name: Show Synapse logs if Matrix endpoint never came up
+      environment: "{{ rootless_env }}"
+      ansible.builtin.command:
+        cmd: nerdctl logs matrix-synapse --tail 80
+      register: synapse_logs
+      when: matrix_health is failed
+      changed_when: false
+
+    - name: Print Caddy logs
+      ansible.builtin.debug:
+        msg: "{{ caddy_logs.stdout_lines }}"
+      when: matrix_health is failed
+
+    - name: Print Synapse logs
       ansible.builtin.debug:
         msg: "{{ synapse_logs.stdout_lines }}"
-      when: synapse_health is failed
+      when: matrix_health is failed
 
-    - name: Fail explicitly with a clear message
+    - name: Fail explicitly if Matrix did not come up
       ansible.builtin.fail:
-        msg: "Synapse did not come up - see logs above."
-      when: synapse_health is failed
+        msg: >
+          Matrix did not come up at
+          https://{{ matrix_domain }}/_matrix/client/versions.
+          See Caddy and Synapse logs above.
+      when: matrix_health is failed
 
-    - name: Register a demo user (alice) so you can log in via Element
+    - name: Register demo user
       environment: "{{ rootless_env }}"
       ansible.builtin.command: >
         nerdctl exec matrix-synapse
@@ -135,4 +186,12 @@
         http://localhost:8008
       register: reg_result
       changed_when: "'Success!' in reg_result.stdout"
-      failed_when: reg_result.rc != 0 and 'already taken' not in (reg_result.stderr | default(''))
+      failed_when:
+        - reg_result.rc != 0
+        - "'already taken' not in (reg_result.stderr | default(''))"
+
+    - name: Show deployment URL
+      ansible.builtin.debug:
+        msg:
+          - "Matrix/Element: https://{{ matrix_domain }}"
+          - "Test user: @{{ matrix_test_user }}:{{ matrix_domain }}"

@@ -1,0 +1,30 @@
+{{ matrix_domain }} {
+    encode gzip
+
+    # Matrix client/server discovery.
+    handle /.well-known/matrix/client {
+        header Content-Type application/json
+        respond `{"m.homeserver":{"base_url":"https://{{ matrix_domain }}"}}`
+    }
+
+    # Matrix server discovery.
+    handle /.well-known/matrix/server {
+        header Content-Type application/json
+        respond `{"m.server":"{{ matrix_domain }}:443"}`
+    }
+
+    # Matrix APIs and federation.
+    handle /_matrix/* {
+        reverse_proxy synapse:8008
+    }
+
+    # Synapse-specific endpoints.
+    handle /_synapse/* {
+        reverse_proxy synapse:8008
+    }
+
+    # Everything else is Element Web.
+    handle {
+        reverse_proxy element:80
+    }
+}
