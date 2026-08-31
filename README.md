@@ -325,6 +325,10 @@ returns the homeserver discovery information.
 
 The server discovery endpoint allows Matrix clients and other Matrix homeservers to discover the Matrix server endpoint from the server name.
 
+## NOTES
+- Whitelist / Blacklist of servers?
+- Video/Teams chat
+- 
 
 # LICENSE
 EUPL-1.2 
