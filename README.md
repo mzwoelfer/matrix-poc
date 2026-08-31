@@ -37,7 +37,7 @@ all:
 ```bash
 pip install ansible
 ansible-galaxy install -r requirements.yml -p roles/
-ansible-playbook site.yml
+ansible-playbook matrix-server.yaml
 ```
 
 ## What the playbook does
