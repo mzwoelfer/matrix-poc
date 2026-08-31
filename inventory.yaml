@@ -9,4 +9,4 @@ all:
       matrix_domain: svatrix.duckdns.org
     training-13:
       ansible_host: 167.233.198.193
-      # matrix_domain: another-name.duckdns.org
+      matrix_domain: svatrix2.duckdns.org
